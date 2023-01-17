@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Sign up - SoakYourBrain{% endblock title %}
+{% block content %}
+    <main role="main" class="container">
+        <div class="signup-header">
+            <h1 class="colorbluesapphire">Sign up for your <span id="plan">{{ plan_selected }}</span>
+                plan at {{ plan_cost }}</h1>
+        </div>
+        <br>
+        <div class="container signup-form">
+            <form name="signup" id="signupform">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="firstname">Your name</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="firstname" name="firstname"
+                               aria-describedby="nameHelp"
+                               placeholder="First name" required>
+                        &nbsp;
+                        <input type="text" class="form-control" id="lastname" name="lastname"
+                               aria-describedby="nameHelp"
+                               placeholder="Last name" required>
+                    </div>
+                    <small id="nameHelp" class="form-text text-muted">Please enter your name</small>
+                </div>
+                <div class="form-group">
+                    <label for="collegename">College name</label>
+                    <input type="text" class="form-control" id="collegename" name="collegename"
+                           aria-describedby="collegenameHelp"
+                           placeholder="Your college name" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email address</label>
+                    <input type="email" class="form-control" id="email" name="email" aria-describedby="emailHelp"
+                           placeholder="Enter email" required>
+                    <small id="emailHelp" class="form-text text-muted">We'll never share your email with anyone
+                        else. <br>
+                        <strong>Your email address will also be your username </strong>
+                    </small>
+                </div>
+                <div class="form-group">
+                    <label for="password1">Password</label>
+                    <input type="password" class="form-control" id="password1" name="password1" placeholder="Password"
+                           required>
+                </div>
+                <div class="form-group">
+                    <label for="password2">Re-enter password</label>
+                    <input type="password" class="form-control" id="password2" name="password2"
+                           placeholder="Re-enter password" required>
+                </div>
+                <div class="form-group">
+                    <label for="phoneno">Phone no.</label>
+                    <input type="tel" class="form-control" id="phoneno" name="phoneno"
+                           aria-describedby="phonenoHelp"
+                           placeholder="+910123456789" required>
+                    <small id="phonenoHelp" class="form-text text-muted"><strong>Please use this format [country code]
+                        [phone number]</strong>
+                        <br>We'll never share your phone number with anyone
+                        else.</small>
+                </div>
+                <div class="form-group">
+                    <label for="cardnumber">Enter credit card no.</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control col-10" id="cardnumber" name="cardnumber"
+                               aria-describedby="cardHelp" maxlength="19"
+                               placeholder="XXXX XXXX XXXX XXXX" required>
+                        &nbsp;
+                        <input type="text" class="form-control col-2" id="cardcvv" name="cardcvv"
+                               aria-describedby="cardHelp"
+                               maxlength="4"
+                               placeholder="CVV" required>
+                    </div>
+                    <small id="cardHelp" class="form-text text-muted"><strong>You card will be automatically charged for
+                        renewal
+                        at the end of every month. You can cancel your subscription at any time before 24 hours
+                        of the last date.</strong></small>
+                </div>
+                <div class="alert alert-warning alert-dismissible fade show" id="formerror" role="alert">
+                    <strong id="alertmessage"></strong>
+                    <button type="button" class="close" id="alertclose" aria-label="Close">
+                        &times;
+                    </button>
+                </div>
+                <button type="button" class="btn btn-success" onclick="validateAndSubmit()">Pay and signup</button>
+            </form>
+        </div>
+    </main>
+    <br>
+{% endblock content %}

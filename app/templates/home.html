@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}SoakYourBrain - e-learning management platform{% endblock title %}
+{% block content %}
+    <main role="main" class="container-md">
+        <div class="headline">
+            <h1>
+                With <span class="brand-text colorbluesapphire">SoakYourBrain</span> you can manage the learning and teaching process
+                easily
+            </h1>
+            <hr>
+            <div class="brand-small-text">We provide you a custom e-learning platform where you can engage your students
+                with quality learning experience.
+            </div>
+        </div>
+        <br><br><br><br>
+        <div class="feature-image-container">
+            <img class="feature-image img-fluid" src="{% static 'images/student_1.jpg' %}">
+        </div>
+        <br><br><br><br>
+        <div class="features">
+            <h2 class="colorbluesapphire"><strong>Features</strong></h2>
+            <br>
+            <div class="row">
+                <div class="col-6 feature-image-container">
+                    <img class="feature-image img-fluid" src="{% static 'images/laptop.jpg' %}">
+                </div>
+                <div class="col-6">
+                    <h4 class="colorbluesapphire">Make teaching more productive and meaningful</h4>
+                    <p>We have worked with educators and understood what were the major challenges the teachers
+                        as well as students were facing and cae up with this platform.
+                        SoakYourBrain lets teachers create classes, subjects/topics, upload recorded video lectures,
+                        share notes, assign work to students, grade and send feedback, all of this at one place.</p>
+                </div>
+            </div>
+        </div>
+        <br><br><br><br>
+        <div id="pricing">
+            <h2 class="colorbluesapphire"><strong>Pricing</strong></h2>
+            <br>
+            <table class="table">
+                <thead class="thead-dark">
+                <tr>
+                    <th></th>
+                    <th>Basic</th>
+                    <th>Standard</th>
+                    <th>Pro</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td class="row-desc">Price per month</td>
+                    <td>₹129 / month<sup>*</sup></td>
+                    <td>₹299 / month<sup>*</sup></td>
+                    <td>₹649 / month<sup>*</sup></td>
+                </tr>
+                <tr>
+                    <td class="row-desc">Price you will be paying per year</td>
+                    <td>₹1300 / year</td>
+                    <td>₹3100 / year</td>
+                    <td>₹6500 / year</td>
+                </tr>
+                <tr>
+                    <td class="row-desc">Storage</td>
+                    <td>100 GB</td>
+                    <td>400 GB</td>
+                    <td>2 TB</td>
+                </tr>
+                <tr>
+                    <td colspan="4">
+                        Payment will be on yearly basis and not monthly.<sup>*</sup>
+                    </td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td><a class="btn btn-warning buy-btns" href="{% url 'signup' plan_subscribed='Basic' %}">Buy</a></td>
+                    <td><a class="btn btn-warning buy-btns" href="{% url 'signup' plan_subscribed='Standard' %}">Buy</a></td>
+                    <td><a class="btn btn-warning buy-btns" href="{% url 'signup' plan_subscribed='Pro' %}">Buy</a></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </main>
+    <br><br>
+{% endblock content %}
