@@ -5,8 +5,8 @@ they are represented by their respective tables (College and Customer table if t
 if that User is a teacher).
 This is the most simple way to work with the django's built-in authentication system.
 """
-from django.db import models
 from django.contrib.auth.models import User
+from django.db import models
 
 
 # Create your models here.
@@ -37,9 +37,9 @@ class College(models.Model):
 
 
 class Customer(models.Model):
-    '''
+    """
     This is a copy of the College table but this table will exist even if College (customer) deletes his/her account
-    '''
+    """
     user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True)
     plan_subscribed = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True)
     first_name = models.CharField(max_length=256)
@@ -63,7 +63,7 @@ class Department(models.Model):
 
 class CollegeClass(models.Model):
     college = models.ForeignKey(College, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=50, unique=True)
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
@@ -73,40 +73,148 @@ class CollegeClass(models.Model):
 class Teacher(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     college = models.ForeignKey(College, on_delete=models.CASCADE)
-    college_class = models.ManyToManyField(CollegeClass, blank=True)
+    college_classes = models.ManyToManyField(CollegeClass, blank=True)
     first_name = models.CharField(max_length=256)
     last_name = models.CharField(max_length=256)
     email = models.EmailField(max_length=256, unique=True)
 
     def __str__(self):
-        return self.first_name
+        return f'{self.first_name} {self.last_name}'
 
 
 class Student(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     college = models.ForeignKey(College, on_delete=models.CASCADE)
-    class_name = models.ForeignKey(CollegeClass, on_delete=models.SET_NULL, null=True, blank=True)
+    college_class = models.ForeignKey(CollegeClass, on_delete=models.SET_NULL, null=True, blank=True)
     first_name = models.CharField(max_length=256)
     last_name = models.CharField(max_length=256)
     email = models.EmailField(max_length=256, unique=True)
 
     def __str__(self):
-        return self.first_name
+        return f'{self.first_name} {self.last_name}'
 
 
 class Subject(models.Model):
-    class_name = models.ForeignKey(CollegeClass, on_delete=models.CASCADE)
+    college_class = models.ForeignKey(CollegeClass, on_delete=models.CASCADE)
     name = models.CharField(max_length=256)
 
     def __str__(self):
         return self.name
 
 
-class ClassWork(models.Model):
-    class_name = models.ForeignKey(CollegeClass, on_delete=models.CASCADE)
+class ClassWorkPost(models.Model):
+    college_class = models.ForeignKey(CollegeClass, on_delete=models.CASCADE)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE)
+    students = models.ManyToManyField(Student, blank=True)
     title = models.CharField(max_length=256)
-    body = models.CharField(max_length=500, null=True, blank=True)
+    is_assignment = models.BooleanField(default=False)
 
     def __str__(self):
         return self.title
+
+
+class TextPost(models.Model):
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    body = models.CharField(max_length=500, null=True, blank=True)
+
+    def __str__(self):
+        return self.post.title
+
+
+def user_video_directory_path(instance, filename):
+    # this will return a file path that is unique for all the users
+    # file will be uploaded to MEDIA_ROOT/user_id/videos/filename
+    return f'user_{instance.user.id}/videos/{instance.post.id}/{filename}'
+
+
+class VideoPost(models.Model):
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    body = models.CharField(max_length=500, null=True, blank=True)
+    video_url = models.FileField(upload_to=user_video_directory_path)
+
+    def __str__(self):
+        return self.post.title
+
+
+def user_document_directory_path(instance, filename):
+    # this will return a file path that is unique for all the users
+    # file will be uploaded to MEDIA_ROOT/user_id/documents/filename
+    return f'user_{instance.user.id}/documents/{instance.post.id}/{filename}'
+
+
+class DocumentPost(models.Model):
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    body = models.CharField(max_length=500, null=True, blank=True)
+    video_url = models.FileField(upload_to=user_document_directory_path)
+
+    def __str__(self):
+        return self.post.title
+
+
+def user_image_directory_path(instance, filename):
+    # this will return a file path that is unique for all the users
+    # file will be uploaded to MEDIA_ROOT/user_id/images/filename
+    return f'user_{instance.user.id}/images/{instance.post.id}/{filename}'
+
+
+class ImagePost(models.Model):
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    body = models.CharField(max_length=500, null=True, blank=True)
+    video_url = models.ImageField(upload_to=user_image_directory_path)
+
+    def __str__(self):
+        return self.post.title
+
+
+class YouTubePost(models.Model):
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    youtube_link = models.CharField(max_length=256, null=True, blank=True)
+
+    def __str__(self):
+        return self.post.title
+
+
+class LinkPost(models.Model):
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    body = models.CharField(max_length=500, null=True, blank=True)
+
+    def __str__(self):
+        return self.post.title
+
+
+class PostComment(models.Model):
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    comment = models.CharField(max_length=500, null=True, blank=True)
+
+    def __str__(self):
+        return self.post.title
+
+
+class ClassTestPost(models.Model):
+    college_class = models.ForeignKey(CollegeClass, on_delete=models.CASCADE)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    teacher = models.ForeignKey(Teacher, on_delete=models.CASCADE)
+    students = models.ManyToManyField(Student, blank=True)
+    title = models.CharField(max_length=256)
+    description = models.CharField(max_length=500, null=True, blank=True)
+
+    def __str__(self):
+        return self.title
+
+
+class Question(models.Model):
+    class_test_post = models.ForeignKey(ClassTestPost, on_delete=models.CASCADE)
+    question = models.CharField(max_length=500, null=True, blank=True)
+
+    def __str__(self):
+        return self.question
+
+
+class Choice(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    choice = models.CharField(max_length=256, null=True, blank=True)
+    is_correct = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f'{self.question.question} {self.choice}'
