@@ -24,6 +24,7 @@
         <div class="content" id="content-dashboard">
             <h1 class="colorbluesapphire">Dashboard</h1>
             <!-- TODO: Add dashboard content here-->
+
         </div>
         <div class="content hidden" id="content-classes">
             <div class="float-lg-left">
@@ -35,8 +36,9 @@
                         <tr>
                             <th scope="col">#</th>
                             <th scope="col">Name</th>
-                            <th scope="col">Department</th>
+                            <th scope="col">Dept.</th>
                             <th scope="col">Edit</th>
+                            <th scope="col">Delete</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -47,6 +49,9 @@
                                 <td>{{ cls.department.name }}</td>
                                 <td>
                                     <button class="btn btn-warning class-edit-btn">Edit</button>
+                                </td>
+                                <td>
+                                    <button class="btn btn-danger class-delete-btn">Delete</button>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -67,6 +72,7 @@
                             <th scope="col">#</th>
                             <th scope="col">Name</th>
                             <th scope="col">Edit</th>
+                            <th scope="col">Delete</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -76,6 +82,9 @@
                                 <td>{{ department.name }}</td>
                                 <td>
                                     <button class="btn btn-warning department-edit-btn">Edit</button>
+                                </td>
+                                <td>
+                                    <button class="btn btn-danger department-delete-btn">Delete</button>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -88,10 +97,10 @@
         {# List existing teachers #}
         <div class="content hidden" id="content-teachers">
             <h1 class="colorbluesapphire">Teachers List</h1>
-            <div class="cell-show-sm">
+            <div class="content-show-sm">
                 <select id="col-to-show">
-                    <option>Show email-ids</option>
                     <option>Show names</option>
+                    <option>Show email-ids</option>
                 </select>
                 <br><br>
             </div>
@@ -101,19 +110,20 @@
                     <thead class="thead-dark bgcolorbluesapphire">
                     <tr>
                         <th scope="col">#</th>
-                        <th class="cell-hide-sm name-col" scope="col">Name</th>
-                        <th class="email-col" scope="col">Email Id</th>
-                        <th class="cell-hide-sm" scope="col">Classes Assigned</th>
+                        <th class="name-col" scope="col">Name</th>
+                        <th class="content-hide-sm email-col" scope="col">Email Id</th>
+                        <th class="content-hide-sm" scope="col">Classes Assigned</th>
                         <th scope="col">Edit</th>
+                        <th scope="col">Delete</th>
                     </tr>
                     </thead>
                     <tbody>
                     {% for teacher in teachers %}
                         <tr>
                             <td>{{ teacher.id }}</td>
-                            <td class="cell-hide-sm name-col">{{ teacher.first_name }}&nbsp;{{ teacher.last_name }}</td>
-                            <td class="email-col">{{ teacher.email }}</td>
-                            <td class="cell-hide-sm">
+                            <td class="name-col">{{ teacher.first_name }}&nbsp;{{ teacher.last_name }}</td>
+                            <td class="content-hide-sm email-col">{{ teacher.email }}</td>
+                            <td class="content-hide-sm">
                                 {% for clg_cls in teacher.college_classes.all %}
                                     {{ clg_cls.name }}&nbsp;
                                 {% endfor %}
@@ -121,6 +131,11 @@
                             <td>
                                 <button id="edit{{ teacher.id }}" class="btn btn-warning teacher-edit-btn">
                                     Edit
+                                </button>
+                            </td>
+                            <td>
+                                <button id="delete{{ teacher.id }}" class="btn btn-danger teacher-delete-btn">
+                                    Delete
                                 </button>
                             </td>
                         </tr>
@@ -163,7 +178,7 @@
                         </select>
                         <small id="selectclassesHelp" class="form-text text-muted">
                             <strong>
-                            Please hold the CTRL key on Windows/Linux or CMD key on Mac before clicking.
+                                Please hold the CTRL key on Windows/Linux or CMD key on Mac before clicking.
                             </strong>
                         </small>
                     </div>
@@ -206,7 +221,8 @@
             </div>
         </div>
         <br><br>
-        {# Toast notification #}
+
+        {# Toast notification markup #}
         <div id="toast-polite-div" class="hidden" aria-live="polite" aria-atomic="true"
              style="position: relative; min-height: 200px;">
             <!-- Position it -->
@@ -222,7 +238,10 @@
             </div>
         </div>
     </main>
-    <script type="text/javascript">
+{% endblock admin-content %}
+
+{% block college-admin-script %}
+    <script>
         if (!document.getElementById("home-link").classList.contains('active')) {
             document.getElementById("home-link").classList.add('active');
         }
@@ -307,11 +326,8 @@
                 dashboardContent.classList.add("hidden");
             }
         });
-    </script>
-{% endblock admin-content %}
 
-{% block college-admin-script %}
-    <script>
+
         $(document).ready(function () {
             {# Table search code in jQuery explanation #}
             {# elements.filter(fn) will apply the fn (function) to all the elements in the elements i.e. list of elements #}
@@ -372,7 +388,7 @@
                     let departmentElement = $(this).parent().siblings()[2];
                     let clsName = nameElement.firstChild.value;
                     let departmentName = departmentElement.firstChild.value;
-                    let url = `/college/add_classes/${idElement.innerHTML}`;
+                    let url = `/college/add_classes/${idElement.innerText}`;
                     fetch(url, {
                         method: 'POST',
                         headers: {
@@ -392,17 +408,45 @@
                             let dept = data['department_name'];
                             let nameElement = $(this).parent().siblings()[1];
                             let departmentElement = $(this).parent().siblings()[2];
-                            nameElement.innerHTML = name;
-                            departmentElement.innerHTML = dept;
+                            nameElement.innerText = name;
+                            departmentElement.innerText = dept;
                             $(this).text("Edit");
                         } else {
                             document.getElementById('toast-polite-div').classList.remove('hidden');
-                            $('.toast-header').children()[0].innerHTML = 'Error!';
-                            $('.toast-body').innerHTML = data['msg'];
+                            $('.toast-header').children()[0].innerText = 'Error!';
+                            $('.toast-header').siblings()[0].innerText = data['msg'];
                             $('.toast').toast('show');
                         }
                     });
                 }
+            });
+
+            {# Class delete button #}
+            $(".class-delete-btn").on("click", function () {
+                let classId = $(this).parent().siblings()[0].innerText;
+                let url = `/college/del_classes/${classId}`;
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
+                    },
+                    body: JSON.stringify({
+                        'form_type': 'class',
+                    })
+                }).then((response) => {
+                    return response.json();
+                }).then((data) => {
+                    if (data['process'] === 'success') {
+                        // remove this row from the table
+                        $(this).parent().parent().remove();
+                    } else {
+                        document.getElementById('toast-polite-div').classList.remove('hidden');
+                        $('.toast-header').children()[0].innerText = 'Error!';
+                        $('.toast-header').siblings()[0].innerText = data['msg'];
+                        $('.toast').toast('show');
+                    }
+                });
             });
 
             {#  jQuery code for updating departments table items #}
@@ -423,7 +467,7 @@
                     let idElement = $(this).parent().siblings()[0];
                     let departmentElement = $(this).parent().siblings()[1];
                     let departmentName = departmentElement.firstChild.value;
-                    let url = `/college/add_classes/${idElement.innerHTML}`;
+                    let url = `/college/add_classes/${idElement.innerText}`;
                     fetch(url, {
                         method: 'POST',
                         headers: {
@@ -440,20 +484,48 @@
                         if (data['process'] === 'success') {
                             let dept = data['department_name'];
                             let departmentElement = $(this).parent().siblings()[1];
-                            departmentElement.innerHTML = dept;
+                            departmentElement.innerText = dept;
 
                             $("#class-table tbody tr").filter(function () {
-                                $(this).children()[2].innerHTML = ($(this).children()[2].innerHTML === oldDeptName) ? dept : $(this).children()[2].innerHTML;
+                                $(this).children()[2].innerText = ($(this).children()[2].innerText === oldDeptName) ? dept : $(this).children()[2].innerText;
                             });
                             $(this).text("Edit");
                         } else {
                             document.getElementById('toast-polite-div').classList.remove('hidden');
-                            $('.toast-header').children()[0].innerHTML = 'Error!';
-                            $('.toast-body').innerHTML = data['msg'];
+                            $('.toast-header').children()[0].innerText = 'Error!';
+                            $('.toast-header').siblings()[0].innerText = data['msg'];
                             $('.toast').toast('show');
                         }
                     });
                 }
+            });
+
+            {# Department delete button #}
+            $(".department-delete-btn").on("click", function () {
+                let departmentId = $(this).parent().siblings()[0].innerText;
+                let url = `/college/del_classes/${departmentId}`;
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
+                    },
+                    body: JSON.stringify({
+                        'form_type': 'department',
+                    })
+                }).then((response) => {
+                    return response.json();
+                }).then((data) => {
+                    if (data['process'] === 'success') {
+                        // remove this row from the table
+                        $(this).parent().parent().remove();
+                    } else {
+                        document.getElementById('toast-polite-div').classList.remove('hidden');
+                        $('.toast-header').children()[0].innerText = 'Error!';
+                        $('.toast-header').siblings()[0].innerText = data['msg'];
+                        $('.toast').toast('show');
+                    }
+                });
             });
 
             // Toast: on hide add hidden class to the classList of #toast-polite-div
@@ -461,39 +533,13 @@
                 document.getElementById('toast-polite-div').classList.add('hidden');
             });
 
-            // Column show/hide dropdown control for small devices
-            $('#col-to-show').on('change', function () {
-                if (this.selectedIndex === 0) {
-                    $('.name-col').filter(function () {
-                        if (!this.classList.contains('cell-hide-sm')) {
-                            this.classList.add('cell-hide-sm');
-                        }
-                    });
-                    $('.email-col').filter(function () {
-                        if (this.classList.contains('cell-hide-sm')) {
-                            this.classList.remove('cell-hide-sm');
-                        }
-                    });
-                } else if (this.selectedIndex === 1) {
-                    $('.email-col').filter(function () {
-                        if (!this.classList.contains('cell-hide-sm')) {
-                            this.classList.add('cell-hide-sm');
-                        }
-                    });
-                    $('.name-col').filter(function () {
-                        if (this.classList.contains('cell-hide-sm')) {
-                            this.classList.remove('cell-hide-sm');
-                        }
-                    });
-                }
-            })
 
             // Teacher edit screen
             $('.teacher-edit-btn').on('click', function () {
                 document.getElementById('dash-nav').style.display = 'none';
                 document.getElementById('content-teachers').classList.add('hidden');
                 document.getElementById('content-teachers-edit').classList.remove('hidden');
-                document.getElementById('id-teacher-edit').innerText = $(this).parent().siblings()[0].innerHTML;
+                document.getElementById('id-teacher-edit').innerText = $(this).parent().siblings()[0].innerText;
 
                 // Pre-fill the form with the data of this particular teacher
                 let teacher_id = document.getElementById('id-teacher-edit').innerText;
@@ -534,6 +580,59 @@
                 });
 
             });
+
+            {# Teacher delete button #}
+            $(".teacher-delete-btn").on("click", function () {
+                let departmentId = $(this).parent().siblings()[0].innerText;
+                let url = `/college/del_teachers/${departmentId}`;
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
+                    },
+                }).then((response) => {
+                    return response.json();
+                }).then((data) => {
+                    console.log(data);
+                    if (data['process'] === 'success') {
+                        // remove this row from the table
+                        $(this).parent().parent().remove();
+                    } else {
+                        document.getElementById('toast-polite-div').classList.remove('hidden');
+                        $('.toast-header').children()[0].innerText = 'Error!';
+                        $('.toast-header').siblings()[0].innerText = data['msg'];
+                        $('.toast').toast('show');
+                    }
+                });
+            });
+
+            // Column show/hide dropdown control for small devices
+            $('#col-to-show').on('change', function () {
+                if (this.selectedIndex === 0) {
+                    $('.email-col').filter(function () {
+                        if (!this.classList.contains('content-hide-sm')) {
+                            this.classList.add('content-hide-sm');
+                        }
+                    });
+                    $('.name-col').filter(function () {
+                        if (this.classList.contains('content-hide-sm')) {
+                            this.classList.remove('content-hide-sm');
+                        }
+                    });
+                } else if (this.selectedIndex === 1) {
+                    $('.name-col').filter(function () {
+                        if (!this.classList.contains('content-hide-sm')) {
+                            this.classList.add('content-hide-sm');
+                        }
+                    });
+                    $('.email-col').filter(function () {
+                        if (this.classList.contains('content-hide-sm')) {
+                            this.classList.remove('content-hide-sm');
+                        }
+                    });
+                }
+            })
 
             // go back button event listener
             $('#go-back-btn').on('click', function () {
@@ -624,14 +723,14 @@
                         // Update the teacher's list table with the new data
                         let updated_data = data['updated_data']
                         $("#teacher-table tbody tr").filter(function () {
-                            if ($(this).children()[0].innerHTML === `${updated_data['id']}`) {
-                                $(this).children()[1].innerHTML = `${updated_data['first_name']} ${updated_data['last_name']}`;
-                                $(this).children()[2].innerHTML = updated_data['email_id'];
+                            if ($(this).children()[0].innerText === `${updated_data['id']}`) {
+                                $(this).children()[1].innerText = `${updated_data['first_name']} ${updated_data['last_name']}`;
+                                $(this).children()[2].innerText = updated_data['email_id'];
                                 let cls_lst = '';
                                 for (let i = 0; i < updated_data['class_list'].length; i++) {
                                     cls_lst += `${updated_data['class_list'][i]} `;
                                 }
-                                $(this).children()[3].innerHTML = cls_lst;
+                                $(this).children()[3].innerText = cls_lst;
                             }
                         });
 

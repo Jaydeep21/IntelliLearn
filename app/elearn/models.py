@@ -9,7 +9,14 @@ from django.contrib.auth.models import User
 from django.db import models
 
 
-# Create your models here.
+# Project models
+class SybAdmin(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    first_name = models.CharField(max_length=256)
+    last_name = models.CharField(max_length=256)
+    email = models.EmailField(max_length=256, unique=True)
+
+
 class Plan(models.Model):
     name = models.CharField(max_length=256)
     price_per_month = models.DecimalField(max_digits=6, decimal_places=2)
@@ -54,17 +61,29 @@ class Customer(models.Model):
 
 
 class Department(models.Model):
+    # TODO: Cross check this model changes with UML digrams and update the diagrams
     college = models.ForeignKey(College, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=50)
+
+    def __str__(self):
+        return self.name
+
+
+class Subject(models.Model):
+    # TODO: Cross check this model changes with UML digrams and update the diagrams
+    college = models.ForeignKey(College, on_delete=models.CASCADE)
+    name = models.CharField(max_length=256)
 
     def __str__(self):
         return self.name
 
 
 class CollegeClass(models.Model):
+    # TODO: Cross check this model changes with UML digrams and update the diagrams
     college = models.ForeignKey(College, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50, unique=True)
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
+    subjects = models.ManyToManyField(Subject, blank=True)
+    name = models.CharField(max_length=50)
 
     def __str__(self):
         return self.name
@@ -92,14 +111,6 @@ class Student(models.Model):
 
     def __str__(self):
         return f'{self.first_name} {self.last_name}'
-
-
-class Subject(models.Model):
-    college_class = models.ForeignKey(CollegeClass, on_delete=models.CASCADE)
-    name = models.CharField(max_length=256)
-
-    def __str__(self):
-        return self.name
 
 
 class ClassWorkPost(models.Model):
@@ -146,7 +157,7 @@ def user_document_directory_path(instance, filename):
 class DocumentPost(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
     body = models.CharField(max_length=500, null=True, blank=True)
-    video_url = models.FileField(upload_to=user_document_directory_path)
+    document_url = models.FileField(upload_to=user_document_directory_path)
 
     def __str__(self):
         return self.post.title
@@ -161,7 +172,7 @@ def user_image_directory_path(instance, filename):
 class ImagePost(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
     body = models.CharField(max_length=500, null=True, blank=True)
-    video_url = models.ImageField(upload_to=user_image_directory_path)
+    image_url = models.ImageField(upload_to=user_image_directory_path)
 
     def __str__(self):
         return self.post.title
@@ -177,7 +188,7 @@ class YouTubePost(models.Model):
 
 class LinkPost(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
-    body = models.CharField(max_length=500, null=True, blank=True)
+    link = models.CharField(max_length=500, null=True, blank=True)
 
     def __str__(self):
         return self.post.title
@@ -185,7 +196,7 @@ class LinkPost(models.Model):
 
 class PostComment(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
-    comment = models.CharField(max_length=500, null=True, blank=True)
+    comment = models.CharField(max_length=500)
 
     def __str__(self):
         return self.post.title
