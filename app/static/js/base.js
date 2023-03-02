@@ -66,6 +66,8 @@ function validateAndSubmit() {
         }).then((data) => {
             if (data['process'] === 'failed') {
                 displayFormErrorMessage('Server error! ' + data['msg']);
+            } else {
+                location.replace('/college/');
             }
         });
     }
@@ -86,31 +88,23 @@ function checkEmailInvalid(emailId) {
      */
     let atSymbolPosition = emailId.indexOf('@');
     let dotSymbolPosition = emailId.indexOf('.');
-    if (atSymbolPosition < 1 || dotSymbolPosition < (atSymbolPosition + 2) || (dotSymbolPosition + 2) >= emailId.length) {
-        return true;
-    }
-    return false;
+    return atSymbolPosition < 1 || dotSymbolPosition < (atSymbolPosition + 2) || (dotSymbolPosition + 2) >= emailId.length;
+
 }
 
 function checkPhoneInvalid(phoneNum) {
-    if (phoneNum.match(/^\+?([0-9]{2})\)?[-. ]?([0-9]{5})[-. ]?([0-9]{5})$/) && phoneNum.length <= 13) {
-        return false;
-    }
-    return true;
+    return !(phoneNum.match(/^\+?([0-9]{2})\)?[-. ]?([0-9]{5})[-. ]?([0-9]{5})$/) && phoneNum.length <= 13);
+
 }
 
 function checkCardInvalid(cardNum) {
-    if (cardNum.match(/^[0-9]+$/)) {
-        return false;
-    }
-    return true;
+    return !cardNum.match(/^[0-9]+$/);
+
 }
 
 function displayFormErrorMessage(errorMessage) {
-    let errorBlock = document.getElementById('alertmessage');
-    errorBlock.innerText = errorMessage;
-    let errorAlert = document.getElementById('formerror');
-    errorAlert.style.display = 'block';
+    $('#formerror').show();
+    $('#alertmessage').text(errorMessage);
 }
 
 
@@ -118,7 +112,7 @@ function displayFormErrorMessage(errorMessage) {
 // jQuery code for closing the bootstrap-alert when the 'x' button is clicked
 $(document).ready(function () {
     $('#alertclose').click(function () {
-        $('#formerror').css('display', 'none');
+        $('#formerror').hide();
     });
 });
 
@@ -127,7 +121,13 @@ $(document).ready(function () {
 // This is just for increasing the readability for the user.
 $(document).ready(function () {
     $("#cardnumber").keydown(function (e) {
+        // prevent user from entering alphabets and some other unwanted characters
+        if ((e.keyCode >= 65 && e.keyCode <= 90) || (e.keyCode >= 106 && e.keyCode <= 111) || e.keyCode === 16) {
+            e.preventDefault();
+        }
+
         let key = e.keyCode || e.charCode;
+
         // Ignore keypress if keys are backspace or delete
         if (!(key === 8 || key === 46)) {
             if ($(this).val().length === 4 ||
@@ -139,7 +139,7 @@ $(document).ready(function () {
     });
 });
 
-// For bootstrap tooltip
+// For enabling bootstrap tooltip
 $(document).ready(function () {
     $('[data-toggle="tooltip"]').tooltip();
 });

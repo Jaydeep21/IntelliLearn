@@ -5,6 +5,10 @@ they are represented by their respective tables (College and Customer table if t
 if that User is a teacher).
 This is the most simple way to work with the django's built-in authentication system.
 """
+import decimal
+from datetime import datetime
+from datetime import timedelta
+
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
@@ -20,6 +24,7 @@ class SybAdmin(models.Model):
 
 class Plan(models.Model):
     name = models.CharField(max_length=256)
+    allotted_storage_space = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     price_per_month = models.DecimalField(max_digits=6, decimal_places=2)
     price_per_year = models.DecimalField(max_digits=6, decimal_places=2)
     upcoming_price_per_month = models.FloatField(null=True, blank=True)
@@ -32,6 +37,8 @@ class Plan(models.Model):
 class College(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     plan_subscribed = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True)
+    subscription_start_date = models.DateField(blank=True, null=True)
+    subscription_end_date = models.DateField(blank=True, null=True)
     first_name = models.CharField(max_length=256)
     last_name = models.CharField(max_length=256)
     college_name = models.CharField(max_length=500)
@@ -39,26 +46,62 @@ class College(models.Model):
     phone_no = models.CharField(max_length=13)
     card_info = models.CharField(max_length=16)
     signup_date = models.DateTimeField(auto_now_add=True)
+    used_storage_space = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    subscription_active = models.BooleanField(default=True)
+
+    @property
+    def name(self):
+        return f'{self.first_name} {self.last_name}'
 
     def __str__(self):
         return self.college_name
 
+    def set_initial_subscription_dates(self):
+        self.subscription_start_date = datetime.now().date()
+        self.subscription_end_date = self.subscription_start_date + timedelta(days=365)
 
-class Customer(models.Model):
-    """
-    This is a copy of the College table but this table will exist even if College (customer) deletes his/her account
-    """
-    user = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True)
+    def days_left(self):
+        delta = self.subscription_end_date - datetime.now().date()
+        return delta.days
+
+    def renew(self, plan, card_info):
+        # Only renew if days left is 15 or less
+        if self.days_left() <= 15:
+            self.plan_subscribed = plan
+            self.card_info = card_info
+            self.subscription_start_date = datetime.now().date()
+            self.subscription_end_date = self.subscription_start_date + timedelta(days=365 + self.days_left())
+
+    def plan_upgrade(self, new_plan):
+        self.plan_subscribed = new_plan
+
+    def cancel_plan(self):
+        self.subscription_start_date = None
+        self.subscription_end_date = None
+        self.subscription_active = False
+
+
+class Invoice(models.Model):
+    college = models.ForeignKey(College, on_delete=models.SET_NULL, null=True, blank=True)
     plan_subscribed = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True)
-    first_name = models.CharField(max_length=256)
-    last_name = models.CharField(max_length=256)
-    college_name = models.CharField(max_length=500)
-    email = models.EmailField(max_length=256, unique=True)
-    phone_no = models.CharField(max_length=13)
-    signup_date = models.DateTimeField(auto_now_add=True)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    date = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.college_name
+        return f'{self.college.college_name} - {self.date}'
+
+    @property
+    def customer_name(self):
+        return f'{self.college.first_name} {self.college.last_name}'
+
+    @property
+    def college_name(self):
+        return self.college.college_name
+
+    def pay(self):
+        self.total_amount = self.plan_subscribed.price_per_year
+        self.amount_paid = self.plan_subscribed.price_per_year
 
 
 class Department(models.Model):
@@ -95,6 +138,7 @@ class Teacher(models.Model):
     last_name = models.CharField(max_length=256)
     email = models.EmailField(max_length=256, unique=True)
 
+    @property
     def name(self):
         return f'{self.first_name} {self.last_name}'
 
@@ -110,6 +154,7 @@ class Student(models.Model):
     last_name = models.CharField(max_length=256)
     email = models.EmailField(max_length=256, unique=True)
 
+    @property
     def name(self):
         return f'{self.first_name} {self.last_name}'
 
@@ -148,7 +193,7 @@ def video_directory_path(instance, filename):
 class VideoPost(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
     body = models.CharField(max_length=500, null=True, blank=True)
-    video_url = models.FileField(upload_to=video_directory_path)
+    video_url = models.FileField(upload_to=video_directory_path, blank=True, null=True)
 
     def __str__(self):
         return self.post.title
@@ -156,6 +201,14 @@ class VideoPost(models.Model):
     @property
     def get_media_url(self):
         return f'{settings.MEDIA_URL}{self.video_url}'
+
+    def uploadable(self, file_tobe_uploaded):
+        allotted_storage_space = self.post.college_class.college.plan_subscribed.allotted_storage_space
+        used_storage_space = self.post.college_class.college.used_storage_space
+        print('NO')
+        if decimal.Decimal(file_tobe_uploaded.size / (1024 * 1024 * 1024)) + used_storage_space > allotted_storage_space:
+            return False
+        return True
 
 
 def document_directory_path(instance, filename):
@@ -167,7 +220,7 @@ def document_directory_path(instance, filename):
 class DocumentPost(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
     body = models.CharField(max_length=500, null=True, blank=True)
-    document_url = models.FileField(upload_to=document_directory_path)
+    document_url = models.FileField(upload_to=document_directory_path, blank=True, null=True)
 
     def __str__(self):
         return self.post.title
@@ -175,6 +228,14 @@ class DocumentPost(models.Model):
     @property
     def get_media_url(self):
         return f'{settings.MEDIA_URL}{self.document_url}'
+
+    def uploadable(self, file_tobe_uploaded):
+        allotted_storage_space = self.post.college_class.college.plan_subscribed.allotted_storage_space
+        used_storage_space = self.post.college_class.college.used_storage_space
+        print('NO')
+        if decimal.Decimal(file_tobe_uploaded.size / (1024 * 1024 * 1024)) + used_storage_space > allotted_storage_space:
+            return False
+        return True
 
 
 def image_directory_path(instance, filename):
@@ -186,7 +247,7 @@ def image_directory_path(instance, filename):
 class ImagePost(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
     body = models.CharField(max_length=500, null=True, blank=True)
-    image_url = models.ImageField(upload_to=image_directory_path)
+    image_url = models.ImageField(upload_to=image_directory_path, blank=True, null=True)
 
     def __str__(self):
         return self.post.title
@@ -194,6 +255,14 @@ class ImagePost(models.Model):
     @property
     def get_media_url(self):
         return f'{settings.MEDIA_URL}{self.image_url}'
+
+    def uploadable(self, file_tobe_uploaded):
+        allotted_storage_space = self.post.college_class.college.plan_subscribed.allotted_storage_space
+        used_storage_space = self.post.college_class.college.used_storage_space
+        print('NO')
+        if decimal.Decimal(file_tobe_uploaded.size / (1024 * 1024 * 1024)) + used_storage_space > allotted_storage_space:
+            return False
+        return True
 
 
 class YouTubePost(models.Model):
@@ -215,9 +284,25 @@ class ArticlePost(models.Model):
 class PostComment(models.Model):
     post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
     comment = models.CharField(max_length=500)
+    author = models.ForeignKey(User, on_delete=models.CASCADE, default=None)
+    is_teacher = models.BooleanField(default=False)
+    date = models.DateTimeField(auto_now_add=True)
+    marked_as_deleted = models.BooleanField(default=False)
 
     def __str__(self):
         return self.post.title
+
+
+class CommentReply(models.Model):
+    postcomment = models.ForeignKey(PostComment, on_delete=models.CASCADE)
+    comment = models.CharField(max_length=500)
+    author = models.ForeignKey(User, on_delete=models.CASCADE, default=None)
+    is_teacher = models.BooleanField(default=False)
+    date = models.DateTimeField(auto_now_add=True)
+    marked_as_deleted = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.postcomment.post.title
 
 
 class ClassTestPost(models.Model):
@@ -243,3 +328,56 @@ class Choice(models.Model):
 
     def __str__(self):
         return f'{self.question.question} {self.choice}'
+
+
+class ClassTestSolution(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    classtest = models.ForeignKey(ClassTestPost, on_delete=models.CASCADE)
+    score = models.IntegerField(blank=True, null=True)
+    total_marks = models.IntegerField(blank=True, null=True)
+    date = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.student.name} {self.score}'
+
+
+class StudentChoice(models.Model):
+    classtestsolution = models.ForeignKey(ClassTestSolution, on_delete=models.CASCADE)
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    choice = models.ForeignKey(Choice, on_delete=models.CASCADE)
+
+    @property
+    def is_correct(self):
+        return self.choice.is_correct
+
+    def __str__(self):
+        return f'{self.question.question} {self.choice}'
+
+
+def file_directory_path(instance, filename):
+    # this will return a file path that is unique for all the users
+    # file will be uploaded to MEDIA_ROOT/user_id/images/filename
+    return f'image_{instance.post.pk}/assignments/{instance.post.pk}/{filename}'
+
+
+class AssignmentSolution(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE)
+    post = models.ForeignKey(ClassWorkPost, on_delete=models.CASCADE)
+    file_url = models.FileField(upload_to=file_directory_path, blank=True, null=True)
+    date = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.post.title}: {self.student.name} | Submitted @ {self.date}'
+
+    @property
+    def get_media_url(self):
+        return f'{settings.MEDIA_URL}{self.file_url}'
+
+    def uploadable(self, file_tobe_uploaded):
+        allotted_storage_space = self.post.college_class.college.plan_subscribed.allotted_storage_space
+        used_storage_space = self.post.college_class.college.used_storage_space
+        print('NO')
+        if decimal.Decimal(file_tobe_uploaded.size / (1024 * 1024 * 1024)) + used_storage_space > allotted_storage_space:
+            return False
+        return True

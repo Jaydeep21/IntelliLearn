@@ -276,3 +276,52 @@ $('#addquestionbtn').on('click', function () {
     $('#totalnoofquestions').val(questionNo);
     questionNo++;
 });
+
+// For deleting a post
+$('.post-delete-btn').on('click', function () {
+    let post_id = $(this).siblings().val()
+    let url = `/college/teacher/classroom/delete_test/${post_id}`;
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken,
+        },
+        body: JSON.stringify({})
+    }).then((response) => {
+        return response.json();
+    }).then((data) => {
+        if (data['process'] === 'success') {
+            window.location.reload();
+        } else {
+            // The request failed. Display the appropriate error message sent back in response.
+            $('#formerror').show();
+            displayFormErrorMessage(false, data['msg'], 'alertmessage');
+        }
+    });
+});
+
+// Posts filter
+$('#subjectfilter').on('change', function () {
+    let class_name = $(this).val();
+    let posts = $('.posts');
+
+    for (let i = 0; i < posts.length; i++) {
+        if (posts[i].classList.contains('hidepost')) {
+            posts[i].classList.remove('hidepost');
+        }
+    }
+
+    if (class_name !== 'all') {
+        for (let i = 0; i < posts.length; i++) {
+            if (!posts[i].classList.contains('hidepost') && !posts[i].classList.contains(class_name)) {
+                posts[i].classList.add('hidepost');
+            }
+        }
+    }
+});
+
+
+// For comments feature
+

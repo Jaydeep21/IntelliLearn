@@ -3,11 +3,13 @@ import json
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import Group
-from django.contrib.messages import get_messages
+from django.core.validators import validate_email
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
+from django.utils.html import escape
 
 from .decorators import unauthenticated_user, allowed_users
 from .models import *
@@ -73,28 +75,24 @@ def sign_up(request, plan_subscribed=''):
                 phone_no=phone_no,
                 card_info=card_no,
             )
+            college.set_initial_subscription_dates()
             college.save()
 
-            # now at last the College as Customer
-            customer = Customer.objects.create(
-                user=new_user,
+            # generate the invoice for this payment
+            invoice = Invoice.objects.create(
+                college=college,
                 plan_subscribed=plan,
-                first_name=first_name,
-                last_name=last_name,
-                college_name=college_name,
-                email=email_id,
-                phone_no=phone_no,
             )
-            customer.save()
+            invoice.pay()
+            invoice.save()
 
             # Now log the user in
             auth_user = authenticate(request, username=email_id, password=password1)
             if auth_user is not None:
                 login(request, auth_user)
-                # TODO: redirect() is not working after login() for some reason, need to look it up and fix it
-                return redirect(college_page)
+                return JsonResponse({'process': 'success'})
             else:
-                return JsonResponse({'process': 'failed', 'msg': 'User authentication system failed'})
+                return JsonResponse({'process': 'failed', 'msg': 'User authentication system failed! Please sign in'})
         except IntegrityError:
             return JsonResponse({'process': 'failed', 'msg': 'User already exists'})
         except Exception as err:
@@ -111,7 +109,7 @@ def sign_up(request, plan_subscribed=''):
 @unauthenticated_user
 def sign_in(request):
     if request.method == 'POST':
-        username = request.POST.get('email')  # username and email are one and the same
+        username = request.POST.get('email')  # username and email are one and the same for the context of this app
         password = request.POST.get('password')
         try:
             # Log the user in
@@ -156,8 +154,129 @@ def checkout_page(request):
 
 
 @login_required
+def user_password_reset(request):
+    """
+        This is for resetting password of users
+        :param request:
+        :return:
+    """
+    if request.method == 'POST':
+        go_back_path = request.POST.get('full_path')
+        current_password_entered = request.POST.get('current_password')
+        new_password = request.POST.get('new_password')
+        confirm_new_password = request.POST.get('confirm_new_password')
+
+        user = User.objects.get(pk=request.user.pk)
+
+        if check_password(current_password_entered, user.password):
+            if new_password == confirm_new_password:
+                if 8 <= len(new_password) <= 16:
+                    user.set_password(new_password)
+                    user.save()
+                    msg = 'Password changed successfully'
+                    messages.success(request, f'{msg}')
+                    return redirect(go_back_path)
+                else:
+                    err = 'Password must be 8 to 16 characters long'
+                    messages.error(request, f'{err}')
+                    return redirect(go_back_path)
+            else:
+                err = 'Passwords do not match'
+                messages.error(request, f'{err}')
+                return redirect(go_back_path)
+        else:
+            err = 'Current password entered is incorrect'
+            messages.error(request, f'{err}')
+            return redirect(go_back_path)
+
+    return JsonResponse({
+        'process': 'failed',
+        'msg': 'GET method not supported'
+    })
+
+
+@login_required
+def user_info_change(request):
+    """
+        This is for updating email, first_name and last_name of users
+        :param request:
+        :return:
+    """
+    if request.method == 'POST':
+        go_back_path = request.POST.get('full_path')
+        email = request.POST.get('email')
+        first_name = request.POST.get('first_name')
+        last_name = request.POST.get('last_name')
+
+        user = request.user
+        teacher = None
+        student = None
+        college = None
+
+        try:
+            teacher = request.user.teacher
+        except Exception as err:
+            teacher = None
+
+        try:
+            student = request.user.student
+        except Exception as err:
+            student = None
+
+        try:
+            college = request.user.college
+        except Exception as err:
+            college = None
+
+        try:
+            validate_email(email)
+        except Exception as err:
+            messages.error(request, f'{err}')
+            return redirect(go_back_path)
+
+        if first_name.isalpha():
+            user.first_name = first_name
+            user.last_name = last_name
+            user.email = email
+            user.username = email
+            user.save()
+
+            if teacher is not None:
+                teacher.email = email
+                teacher.first_name = first_name
+                teacher.last_name = last_name
+                teacher.save()
+
+            if student is not None:
+                student.email = email
+                student.first_name = first_name
+                student.last_name = last_name
+                student.save()
+
+            if college is not None:
+                college.email = email
+                college.first_name = first_name
+                college.last_name = last_name
+                college.save()
+
+            msg = 'Your details had been changed successfully'
+            messages.success(request, f'{msg}')
+            return redirect(go_back_path)
+        else:
+            err = 'Name cannot contain numbers in it'
+            messages.error(request, f'{err}')
+            return redirect(go_back_path)
+
+    return JsonResponse({
+        'process': 'failed',
+        'msg': 'GET method not supported'
+    })
+
+
+@login_required
 @allowed_users(allowed_roles=['sybadmin'])
 def syb_admin_page(request):
+    # TODO: Complete SYB admin dashboard section
     context_dict = {}
     return render(request, template_name='sybadmin/dashboard/dashboard.html', context=context_dict)
 
@@ -174,6 +293,59 @@ def college_page(request):
         'classes': classes,
     }
     return render(request, template_name='college/admin/college_admin.html', context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['collegeadmin'])
+def renew_plan(request):
+    if request.method == 'POST':
+        plan_selected = request.POST.get('plan_selected')
+        cardnumber = request.POST.get('cardnumber')
+        cardnumber = cardnumber.replace(' ', '')
+        cardcvv = request.POST.get('cardcvv')
+        plan = None
+
+        try:
+            plan = Plan.objects.get(pk=plan_selected)
+        except Exception as err:
+            messages.error(request, f'{err}')
+            return redirect(renew_plan)
+
+        college = request.user.college
+        college.renew(plan=plan, card_info=cardnumber)
+        college.save()
+
+        invoice = Invoice.objects.create(
+            college=request.user.college,
+            plan_subscribed=plan,
+        )
+        invoice.pay()
+        invoice.save()
+
+        return redirect(college_admin_account)
+
+    if request.user.college.days_left() > 15:
+        return redirect(college_admin_account)
+
+    plans = Plan.objects.all()
+    context_dict = {
+        'plans': plans,
+    }
+    return render(request, template_name='college/admin/renew_plan.html', context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['collegeadmin'])
+def cancel_plan(request):
+    if request.method == 'POST':
+        # TODO: Complete this by calling the college's cancel_plan() method
+        pass
+
+    context_dict = {}
+    return JsonResponse({
+        'process': 'failed',
+        'msg': 'GET method is not supported by this endpoint',
+    })
 
 
 @login_required
@@ -503,6 +675,33 @@ def college_del_classes(request, pk=None):
 
 
 @login_required
+@allowed_users(allowed_roles=['collegeadmin'])
+def college_admin_account(request):
+    plan = request.user.college.plan_subscribed
+    allotted_sp = plan.allotted_storage_space / 1000 if plan.allotted_storage_space > 999 else plan.allotted_storage_space
+    allotted_storage_space = f'{plan.allotted_storage_space / 1000} TB' if plan.allotted_storage_space > 999 else f'{plan.allotted_storage_space} GB'
+    used_storage_space = request.user.college.used_storage_space
+    storage_space_left = (
+                                     plan.allotted_storage_space / 1000) - used_storage_space if plan.allotted_storage_space > 999 else plan.allotted_storage_space - used_storage_space
+
+    percent_space_used = (used_storage_space / allotted_sp) * 100
+
+    days_left = request.user.college.days_left()
+
+    renewable = True if request.user.college.days_left() <= 15 else False
+
+    context_dict = {
+        'allotted_storage_space': allotted_storage_space,
+        'used_storage_space': f'{used_storage_space} GB',
+        'storage_space_left': f'{storage_space_left} GB',
+        'percent_space_used': percent_space_used,
+        'renewable': renewable,
+        'days_left': days_left,
+    }
+    return render(request, template_name='college/admin/college_admin_account.html', context=context_dict)
+
+
+@login_required
 @allowed_users(allowed_roles=['teacher'])
 def college_teacher(request):
     try:
@@ -744,7 +943,8 @@ def view_student_lists(request):
     college_classes = request.user.teacher.college_classes.all()
 
     for college_class in college_classes:
-        students_info[college_class] = [student for student in Student.objects.all() if student.college_class == college_class]
+        students_info[college_class] = [student for student in Student.objects.all() if
+                                        student.college_class == college_class]
 
     context_dict = {
         'students_info': students_info,
@@ -773,13 +973,17 @@ def college_teacher_classroom(request, pk=None):
         return render(request, template_name='college/teacher/classroom/teacher_classroom.html', context=context_dict)
 
     posts = [post for post in ClassWorkPost.objects.all() if post.college_class == college_class]
-    textposts = [textpost for textpost in TextPost.objects.all() if textpost.post in posts]
-    videoposts = [videopost for videopost in VideoPost.objects.all() if videopost.post in posts]
-    documentposts = [documentpost for documentpost in DocumentPost.objects.all() if documentpost.post in posts]
-    imageposts = [imagepost for imagepost in ImagePost.objects.all() if imagepost.post in posts]
-    youtubeposts = [youtubepost for youtubepost in YouTubePost.objects.all() if youtubepost.post in posts]
-    articleposts = [articlepost for articlepost in ArticlePost.objects.all() if articlepost.post in posts]
-    classtestposts = [classtestpost for classtestpost in ClassTestPost.objects.all() if classtestpost.post in posts]
+    textposts = [textpost for textpost in TextPost.objects.all() if textpost.post.college_class == college_class]
+    videoposts = [videopost for videopost in VideoPost.objects.all() if videopost.post.college_class == college_class]
+    documentposts = [documentpost for documentpost in DocumentPost.objects.all() if
+                     documentpost.post.college_class == college_class]
+    imageposts = [imagepost for imagepost in ImagePost.objects.all() if imagepost.post.college_class == college_class]
+    youtubeposts = [youtubepost for youtubepost in YouTubePost.objects.all() if
+                    youtubepost.post.college_class == college_class]
+    articleposts = [articlepost for articlepost in ArticlePost.objects.all() if
+                    articlepost.post.college_class == college_class]
+    classtestposts = [classtestpost for classtestpost in ClassTestPost.objects.all() if
+                      classtestpost.post.college_class == college_class]
 
     posts_display = []
 
@@ -806,11 +1010,29 @@ def college_teacher_classroom(request, pk=None):
             if classtestpost.post == post:
                 posts_display.insert(0, classtestpost)
 
+    comments_and_replies = []
+
+    for comment in PostComment.objects.all():
+        for post in posts_display:
+            if comment.post == post.post:
+                try:
+                    replies = CommentReply.objects.filter(postcomment=comment)
+                    comments_and_replies.append({
+                        'comments': {
+                            'post_pk': post.post.pk,
+                            'comment': comment,
+                            'replies': replies,
+                        }
+                    })
+                except Exception as err:
+                    pass
+
     context_dict = {
         'college_class': college_class,
         'subjects': subjects,
         'students': students,
         'posts_display': posts_display,
+        'comments_and_replies': comments_and_replies,
     }
 
     return render(request, template_name='college/teacher/classroom/teacher_classroom.html', context=context_dict)
@@ -820,6 +1042,7 @@ def college_teacher_classroom(request, pk=None):
 @allowed_users(allowed_roles=['teacher'])
 def college_teacher_classroom_add_post(request, pk=None):
     if request.method == 'POST':
+        college = College.objects.get(pk=request.user.teacher.college.pk)
         college_class_pk = pk
         try:
             # Get the data from the form
@@ -868,27 +1091,63 @@ def college_teacher_classroom_add_post(request, pk=None):
                 elif post_category == 'videopost':
                     videopostbody = request.POST.get('videopostbody')
                     videopostfile = request.FILES['videopostfile']
-                    VideoPost.objects.create(
+                    video_post = VideoPost.objects.create(
                         post=classworkpost,
                         body=videopostbody,
-                        video_url=videopostfile
                     )
+                    if not video_post.uploadable(file_tobe_uploaded=videopostfile):
+                        video_post.delete()
+                        classworkpost.delete()
+                        err = 'Your college has passed its total upload space limit. ' \
+                              'You can no longer upload any files. ' \
+                              'Please contact your college administrator regarding this'
+                        messages.error(request, f'{err}')
+                        return redirect(college_teacher_classroom, pk=college_class_pk)
+                    video_post.video_url = videopostfile
+                    video_post.save()
+                    college.used_storage_space = college.used_storage_space + (
+                            decimal.Decimal(video_post.video_url.size) / (1024 * 1024 * 1024))
+                    college.save()
                 elif post_category == 'documentpost':
                     documentpostbody = request.POST.get('documentpostbody')
                     documentpostfile = request.FILES['documentpostfile']
-                    DocumentPost.objects.create(
+                    document_post = DocumentPost.objects.create(
                         post=classworkpost,
                         body=documentpostbody,
-                        document_url=documentpostfile
                     )
+                    if not document_post.uploadable(file_tobe_uploaded=documentpostfile):
+                        document_post.delete()
+                        classworkpost.delete()
+                        err = 'Your college has passed its total upload space limit. ' \
+                              'You can no longer upload any files. ' \
+                              'Please contact your college administrator regarding this'
+                        messages.error(request, f'{err}')
+                        return redirect(college_teacher_classroom, pk=college_class_pk)
+                    document_post.document_url = documentpostfile
+                    document_post.save()
+                    college.used_storage_space = college.used_storage_space + (
+                            decimal.Decimal(document_post.document_url.size) / (1024 * 1024 * 1024))
+                    college.save()
                 elif post_category == 'imagepost':
                     imagepostbody = request.POST.get('imagepostbody')
                     imagepostfile = request.FILES['imagepostfile']
-                    ImagePost.objects.create(
+                    image_post = ImagePost.objects.create(
                         post=classworkpost,
                         body=imagepostbody,
-                        image_url=imagepostfile
                     )
+                    if not image_post.uploadable(file_tobe_uploaded=imagepostfile):
+                        image_post.delete()
+                        classworkpost.delete()
+                        err = 'Your college has passed its total upload space limit. ' \
+                              'You can no longer upload any files. ' \
+                              'Please contact your college administrator regarding this'
+                        messages.error(request, f'{err}')
+                        return redirect(college_teacher_classroom, pk=college_class_pk)
+                    image_post.image_url = imagepostfile
+                    image_post.save()
+                    college.used_storage_space = college.used_storage_space + (
+                            decimal.Decimal(image_post.image_url.size) / (1024 * 1024 * 1024))
+                    college.save()
                 elif post_category == 'youtubepost':
                     youtube_link = request.POST.get('youtubepostbody')
                     if youtube_link.count('watch?v=') != 0:
@@ -992,10 +1251,685 @@ def college_teacher_classroom_add_post(request, pk=None):
 
 
 @login_required
+@allowed_users(allowed_roles=['teacher'])
+def college_teacher_classroom_view_test(request, pk=None):
+    classtestpost = ClassTestPost.objects.get(pk=pk)
+    questions = [question for question in Question.objects.all() if question.class_test_post == classtestpost]
+    choices = [choice for choice in Choice.objects.all() if choice.question in questions]
+
+    context_dict = {
+        'classtestpost': classtestpost,
+        'questions': questions,
+        'choices': choices,
+    }
+    return render(request, template_name='college/teacher/classroom/teacher_view_test.html', context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['teacher'])
+def view_tests_submissions(request, class_pk=None):
+    college_class = CollegeClass.objects.get(pk=class_pk)
+    classworkposts = ClassWorkPost.objects.filter(college_class=college_class)
+    classtestposts = [post for post in classworkposts if post.is_classtest]
+    classtestposts = [post for post in ClassTestPost.objects.all() if post.post in classtestposts]
+    classtest_solutions = [post for post in ClassTestSolution.objects.all() if post.classtest in classtestposts]
+
+    context_dict = {
+        'classtest_solutions': classtest_solutions,
+    }
+    return render(request, template_name='college/teacher/classroom/view_tests_submissions.html', context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['teacher'])
+def view_assignments_submissions(request, class_pk=None):
+    college_class = CollegeClass.objects.get(pk=class_pk)
+    classworkposts = ClassWorkPost.objects.filter(college_class=college_class)
+    assignment_posts = [post for post in classworkposts if post.is_assignment]
+    assignment_solutions = [post for post in AssignmentSolution.objects.all() if post.post in assignment_posts]
+
+    context_dict = {
+        'assignment_solutions': assignment_solutions,
+    }
+    return render(request, template_name='college/teacher/classroom/view_assignments_submissions.html',
+                  context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['teacher'])
+def view_test_performance(request, pk=None):
+    classtestsolution = ClassTestSolution.objects.get(pk=pk)
+    student_choices = [choice for choice in StudentChoice.objects.all() if
+                       choice.classtestsolution == classtestsolution]
+
+    test_items = []
+
+    for choice in student_choices:
+        question = choice.question
+        choices = Choice.objects.filter(question=question)
+        selected_choice = choice.choice
+        test_items.append({
+            'question': question,
+            'choices': choices,
+            'selected_choice': selected_choice,
+        })
+
+    context_dict = {
+        'classtestsolution': classtestsolution,
+        'test_items': test_items,
+    }
+    return render(request, template_name='college/teacher/classroom/view_test_performance.html',
+                  context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['teacher'])
+def college_teacher_classroom_delete_test(request, pk=None):
+    college = College.objects.get(pk=request.user.teacher.college.pk)
+    post = None
+    if request.method == 'POST':
+        try:
+            post = ClassWorkPost.objects.get(pk=pk)
+        except Exception as err:
+            return JsonResponse({'process': 'failed', 'msg': f'{err}'})
+
+        try:
+            videopost = VideoPost.objects.get(post=post)
+            if videopost:
+                college.used_storage_space = college.used_storage_space - (
+                        decimal.Decimal(videopost.video_url.size) / (1024 * 1024 * 1024))
+                college.save()
+        except Exception as err:
+            pass
+
+        try:
+            documentpost = DocumentPost.objects.get(post=post)
+            if documentpost:
+                college.used_storage_space = college.used_storage_space - (
+                        decimal.Decimal(documentpost.document_url.size) / (1024 * 1024 * 1024))
+                college.save()
+        except Exception as err:
+            pass
+
+        try:
+            imagepost = ImagePost.objects.get(post=post)
+            if imagepost:
+                college.used_storage_space = college.used_storage_space - (
+                        decimal.Decimal(imagepost.image_url.size) / (1024 * 1024 * 1024))
+                college.save()
+        except Exception as err:
+            pass
+
+        post.delete()
+        return JsonResponse({'process': 'success', 'msg': 'Post successfully deleted'})
+
+    return JsonResponse({'process': 'failed', 'msg': 'GET not supported by this endpoint'})
+
+
+@login_required
 @allowed_users(allowed_roles=['student'])
 def college_student(request):
-    context_dict = {}
-    return render(request, template_name='college/student/student.html', context=context_dict)
+    college_class = request.user.student.college_class
+
+    try:
+        subjects = [subject for subject in Subject.objects.all() if subject in college_class.subjects.all()]
+    except Exception as err:
+        context_dict = {
+            'college_class': None,
+        }
+        return render(request, template_name='college/student/classroom/student_classroom.html', context=context_dict)
+
+    posts = [post for post in ClassWorkPost.objects.all() if post.college_class == college_class]
+    textposts = [textpost for textpost in TextPost.objects.all() if textpost.post.college_class == college_class]
+    videoposts = [videopost for videopost in VideoPost.objects.all() if videopost.post.college_class == college_class]
+    documentposts = [documentpost for documentpost in DocumentPost.objects.all() if
+                     documentpost.post.college_class == college_class]
+    imageposts = [imagepost for imagepost in ImagePost.objects.all() if imagepost.post.college_class == college_class]
+    youtubeposts = [youtubepost for youtubepost in YouTubePost.objects.all() if
+                    youtubepost.post.college_class == college_class]
+    articleposts = [articlepost for articlepost in ArticlePost.objects.all() if
+                    articlepost.post.college_class == college_class]
+    classtestposts = [classtestpost for classtestpost in ClassTestPost.objects.all() if
+                      classtestpost.post.college_class == college_class]
+
+    posts_display = []
+
+    # These loops are necessary to maintain the order of the posts (by datetime of post)
+    for post in posts:
+        for textpost in textposts:
+            if textpost.post == post:
+                posts_display.insert(0, textpost)
+        for videopost in videoposts:
+            if videopost.post == post:
+                posts_display.insert(0, videopost)
+        for documentpost in documentposts:
+            if documentpost.post == post:
+                posts_display.insert(0, documentpost)
+        for imagepost in imageposts:
+            if imagepost.post == post:
+                posts_display.insert(0, imagepost)
+        for youtubepost in youtubeposts:
+            if youtubepost.post == post:
+                posts_display.insert(0, youtubepost)
+        for articlepost in articleposts:
+            if articlepost.post == post:
+                posts_display.insert(0, articlepost)
+        for classtestpost in classtestposts:
+            if classtestpost.post == post:
+                posts_display.insert(0, classtestpost)
+
+    comments_and_replies = []
+
+    for comment in PostComment.objects.all():
+        for post in posts_display:
+            if comment.post == post.post:
+                try:
+                    replies = CommentReply.objects.filter(postcomment=comment)
+                    comments_and_replies.append({
+                        'comments': {
+                            'post_pk': post.post.pk,
+                            'comment': comment,
+                            'replies': replies,
+                        }
+                    })
+                except Exception as err:
+                    pass
+
+    context_dict = {
+        'college_class': college_class,
+        'subjects': subjects,
+        'posts_display': posts_display,
+        'comments_and_replies': comments_and_replies,
+    }
+
+    return render(request, template_name='college/student/classroom/student_classroom.html', context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student'])
+def college_student_assignments(request):
+    college_class = request.user.student.college_class
+
+    try:
+        subjects = [subject for subject in Subject.objects.all() if subject in college_class.subjects.all()]
+    except Exception as err:
+        context_dict = {
+            'college_class': None,
+        }
+        return render(request, template_name='college/student/classroom/student_classroom.html', context=context_dict)
+
+    posts = [post for post in ClassWorkPost.objects.all() if
+             post.college_class == college_class and post.is_assignment == True]
+    textposts = [textpost for textpost in TextPost.objects.all() if textpost.post in posts]
+    videoposts = [videopost for videopost in VideoPost.objects.all() if videopost.post in posts]
+    documentposts = [documentpost for documentpost in DocumentPost.objects.all() if documentpost.post in posts]
+    imageposts = [imagepost for imagepost in ImagePost.objects.all() if imagepost.post in posts]
+    youtubeposts = [youtubepost for youtubepost in YouTubePost.objects.all() if youtubepost.post in posts]
+    articleposts = [articlepost for articlepost in ArticlePost.objects.all() if articlepost.post in posts]
+
+    posts_display = []
+
+    for post in posts:
+        for textpost in textposts:
+            if textpost.post == post:
+                posts_display.insert(0, textpost)
+        for videopost in videoposts:
+            if videopost.post == post:
+                posts_display.insert(0, videopost)
+        for documentpost in documentposts:
+            if documentpost.post == post:
+                posts_display.insert(0, documentpost)
+        for imagepost in imageposts:
+            if imagepost.post == post:
+                posts_display.insert(0, imagepost)
+        for youtubepost in youtubeposts:
+            if youtubepost.post == post:
+                posts_display.insert(0, youtubepost)
+        for articlepost in articleposts:
+            if articlepost.post == post:
+                posts_display.insert(0, articlepost)
+
+    context_dict = {
+        'college_class': college_class,
+        'subjects': subjects,
+        'posts_display': posts_display,
+    }
+
+    return render(request, template_name='college/student/classroom/college_student_assignments.html',
+                  context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student'])
+def college_student_submit_assignment(request, pk=None):
+    post = ClassWorkPost.objects.get(pk=pk)
+    college = College.objects.get(pk=request.user.student.college.pk)
+    assignment_solution = None
+    try:
+        assignment_solution = AssignmentSolution.objects.get(post=post, student=request.user.student)
+    except Exception as err:
+        pass
+
+    if request.method == 'POST':
+        assignment_solution = AssignmentSolution.objects.create(
+            student=request.user.student,
+            post=post,
+        )
+        if assignment_solution.uploadable(file_tobe_uploaded=request.FILES['assignment_file']):
+            assignment_solution.file_url = request.FILES['assignment_file']
+            assignment_solution.save()
+            college.used_storage_space += (assignment_solution.file_url.size / (1024 * 1024 * 1024))
+            college.save()
+            return redirect(college_student)
+
+        assignment_solution.delete()
+
+        err = 'Your college has passed its total upload space limit. ' \
+              'You can no longer upload any files. ' \
+              'Please contact your college administrator regarding this'
+        messages.error(request, f'{err}')
+        return redirect(college_student)
+
+    try:
+        textpost = TextPost.objects.get(post=post)
+        context_dict = {
+            'post': textpost,
+            'assignment_solution': assignment_solution,
+        }
+        return render(request, template_name='college/student/classroom/college_student_submit_assignment.html',
+                      context=context_dict)
+    except Exception as err:
+        pass
+
+    try:
+        videopost = VideoPost.objects.get(post=post)
+        context_dict = {
+            'post': videopost,
+            'assignment_solution': assignment_solution,
+        }
+        return render(request, template_name='college/student/classroom/college_student_submit_assignment.html',
+                      context=context_dict)
+    except Exception as err:
+        pass
+
+    try:
+        documentpost = DocumentPost.objects.get(post=post)
+        context_dict = {
+            'post': documentpost,
+            'assignment_solution': assignment_solution,
+        }
+        return render(request, template_name='college/student/classroom/college_student_submit_assignment.html',
+                      context=context_dict)
+    except Exception as err:
+        pass
+
+    try:
+        imagepost = ImagePost.objects.get(post=post)
+        context_dict = {
+            'post': imagepost,
+            'assignment_solution': assignment_solution,
+        }
+        return render(request, template_name='college/student/classroom/college_student_submit_assignment.html',
+                      context=context_dict)
+    except Exception as err:
+        pass
+
+    try:
+        youtubepost = YouTubePost.objects.get(post=post)
+        context_dict = {
+            'post': youtubepost,
+            'assignment_solution': assignment_solution,
+        }
+        return render(request, template_name='college/student/classroom/college_student_submit_assignment.html',
+                      context=context_dict)
+    except Exception as err:
+        pass
+
+    try:
+        articlepost = ArticlePost.objects.get(post=post)
+        context_dict = {
+            'post': articlepost,
+            'assignment_solution': assignment_solution,
+        }
+        return render(request, template_name='college/student/classroom/college_student_submit_assignment.html',
+                      context=context_dict)
+    except Exception as err:
+        pass
+
+    context_dict = {
+        'post': None,
+        'assignment_solution': None,
+    }
+    return render(request, template_name='college/student/classroom/college_student_submit_assignment.html',
+                  context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student'])
+def college_student_reading_materials(request):
+    college_class = request.user.student.college_class
+
+    try:
+        subjects = [subject for subject in Subject.objects.all() if subject in college_class.subjects.all()]
+    except Exception as err:
+        context_dict = {
+            'college_class': None,
+        }
+        return render(request, template_name='college/student/classroom/student_classroom.html', context=context_dict)
+
+    posts = [post for post in ClassWorkPost.objects.all() if
+             post.college_class == college_class]
+    textposts = [textpost for textpost in TextPost.objects.all() if textpost.post in posts]
+    documentposts = [documentpost for documentpost in DocumentPost.objects.all() if documentpost.post in posts]
+
+    posts_display = []
+
+    for post in posts:
+        for textpost in textposts:
+            if textpost.post == post:
+                posts_display.insert(0, textpost)
+        for documentpost in documentposts:
+            if documentpost.post == post:
+                posts_display.insert(0, documentpost)
+
+    context_dict = {
+        'college_class': college_class,
+        'subjects': subjects,
+        'posts_display': posts_display,
+    }
+
+    return render(request, template_name='college/student/classroom/college_student_reading_materials.html',
+                  context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student'])
+def college_student_videos(request):
+    college_class = request.user.student.college_class
+
+    try:
+        subjects = [subject for subject in Subject.objects.all() if subject in college_class.subjects.all()]
+    except Exception as err:
+        context_dict = {
+            'college_class': None,
+        }
+        return render(request, template_name='college/student/classroom/student_classroom.html', context=context_dict)
+
+    posts = [post for post in ClassWorkPost.objects.all() if
+             post.college_class == college_class]
+    videoposts = [videopost for videopost in VideoPost.objects.all() if videopost.post in posts]
+    youtubeposts = [youtubepost for youtubepost in YouTubePost.objects.all() if youtubepost.post in posts]
+
+    posts_display = []
+
+    for post in posts:
+        for videopost in videoposts:
+            if videopost.post == post:
+                posts_display.insert(0, videopost)
+        for youtubepost in youtubeposts:
+            if youtubepost.post == post:
+                posts_display.insert(0, youtubepost)
+
+    context_dict = {
+        'college_class': college_class,
+        'subjects': subjects,
+        'posts_display': posts_display,
+    }
+
+    return render(request, template_name='college/student/classroom/college_student_videos.html',
+                  context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student'])
+def college_student_articles(request):
+    college_class = request.user.student.college_class
+
+    try:
+        subjects = [subject for subject in Subject.objects.all() if subject in college_class.subjects.all()]
+    except Exception as err:
+        context_dict = {
+            'college_class': None,
+        }
+        return render(request, template_name='college/student/classroom/student_classroom.html', context=context_dict)
+
+    posts = [post for post in ClassWorkPost.objects.all() if
+             post.college_class == college_class]
+    articleposts = [articlepost for articlepost in ArticlePost.objects.all() if articlepost.post in posts]
+
+    posts_display = []
+
+    for post in posts:
+        for articlepost in articleposts:
+            if articlepost.post == post:
+                posts_display.insert(0, articlepost)
+
+    context_dict = {
+        'college_class': college_class,
+        'subjects': subjects,
+        'posts_display': posts_display,
+    }
+
+    return render(request, template_name='college/student/classroom/college_student_articles.html',
+                  context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student'])
+def college_student_classroom_give_test(request, pk=None):
+    if request.method == 'POST':
+        # This request is for submitting a classtest
+        data = json.loads(request.body)
+        classtestpost_id = data['classtestpost_id']
+        qans = data['qans']
+
+        score = 0
+        total_marks = len(qans)
+
+        try:
+            classtestpost = ClassTestPost.objects.get(pk=classtestpost_id)
+
+            classtestsolution = ClassTestSolution.objects.create(
+                student=request.user.student,
+                classtest=classtestpost,
+                score=score,
+                total_marks=total_marks
+            )
+
+            for key, value in qans.items():
+                student_choice = StudentChoice.objects.create(
+                    classtestsolution=classtestsolution,
+                    student=request.user.student,
+                    question=Question.objects.get(pk=key),
+                    choice=Choice.objects.get(pk=value)
+                )
+
+                if student_choice.is_correct:
+                    score += 1
+
+                print(student_choice.is_correct)
+
+            classtestsolution.score = score
+            classtestsolution.save()
+
+            return JsonResponse({'process': 'success', 'msg': 'Post successfully deleted'})
+        except Exception as err:
+            return JsonResponse({'process': 'failed', 'msg': f'{err}'})
+
+    classtestpost = ClassTestPost.objects.get(pk=pk)
+
+    questions = [question for question in Question.objects.all() if question.class_test_post == classtestpost]
+    choices = [choice for choice in Choice.objects.all() if choice.question in questions]
+
+    context_dict = {
+        'classtestpost': classtestpost,
+        'questions': questions,
+        'choices': choices,
+    }
+
+    try:
+        classtestsolution = ClassTestSolution.objects.get(
+            student=request.user.student,
+            classtest=classtestpost,
+        )
+        context_dict['classtestsolution'] = classtestsolution
+    except Exception as err:
+        context_dict['classtestsolution'] = None
+
+    return render(request, template_name='college/student/classroom/student_give_test.html', context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student', 'teacher'])
+def college_teacher_student_account(request):
+    return render(request, template_name='college/teacher_student_account.html')
+
+
+@login_required
+@allowed_users(allowed_roles=['student', 'teacher'])
+def college_student_classroom_view_post(request, pk=None):
+    textpost = TextPost.objects.get(pk=pk)
+
+    context_dict = {
+        'textpost': textpost,
+    }
+    return render(request, template_name='college/classroom_view_post.html', context=context_dict)
+
+
+@login_required
+@allowed_users(allowed_roles=['student', 'teacher'])
+def college_classroom_post_comment(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        post_id = data['post_id']
+        comment = data['comment']
+
+        try:
+            is_teacher = True if request.user.teacher else False
+        except Exception as err:
+            is_teacher = False
+
+        try:
+            classworkpost = ClassWorkPost.objects.get(pk=post_id)
+            postcomment = PostComment.objects.create(
+                post=classworkpost,
+                comment=comment,
+                author=request.user,
+                is_teacher=is_teacher
+            )
+        except Exception as err:
+            return JsonResponse({
+                'process': 'failed',
+                'msg': f'{err}'
+            })
+
+        return JsonResponse({
+            'process': 'success',
+            'comment_id': postcomment.pk,
+            'author': f'{postcomment.author.first_name} {postcomment.author.last_name}',
+            'comment': f'{postcomment.comment}',
+            'is_teacher': f'{postcomment.is_teacher}',
+            'date': f'{postcomment.date}',
+            'msg': 'Comment successfully posted'
+        })
+
+    return JsonResponse({
+        'process': 'failed',
+        'msg': 'GET method not supported'
+    })
+
+
+@login_required
+@allowed_users(allowed_roles=['student', 'teacher'])
+def college_classroom_post_reply(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        comment_id = data['comment_id']
+        replied_to = data['replied_to']
+
+        # This escaping is must because it is marked safe in templates for <b>reply_to_username</b> to display
+        # without escaping.
+        comment = escape(data["comment"])
+        comment = f'{replied_to} {comment}'
+
+        try:
+            is_teacher = True if request.user.teacher else False
+        except Exception as err:
+            is_teacher = False
+
+        try:
+            postcomment = PostComment.objects.get(pk=comment_id)
+            commentreply = CommentReply.objects.create(
+                postcomment=postcomment,
+                comment=comment,
+                author=request.user,
+                is_teacher=is_teacher
+            )
+        except Exception as err:
+            return JsonResponse({
+                'process': 'failed',
+                'msg': f'{err}'
+            })
+
+        return JsonResponse({
+            'process': 'success',
+            'comment_id': commentreply.postcomment.pk,
+            'author': f'{commentreply.author.first_name} {commentreply.author.last_name}',
+            'comment': f'{commentreply.comment}',
+            'is_teacher': f'{commentreply.is_teacher}',
+            'date': f'{commentreply.date}',
+            'msg': 'Reply successfully posted'
+        })
+
+    return JsonResponse({
+        'process': 'failed',
+        'msg': 'GET method not supported'
+    })
+
+
+@login_required
+@allowed_users(allowed_roles=['student', 'teacher'])
+def delete_comment_or_reply(request, pk=None):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        comment_id = data['comment_id']
+        reply_id = data['reply_id']
+
+        if reply_id is None:
+            # This request is for deleting a comment
+            try:
+                comment = PostComment.objects.get(pk=comment_id)
+                comment.marked_as_deleted = True
+                comment.save()
+                return JsonResponse({
+                    'process': 'success',
+                    'msg': 'Comment deleted successfully'
+                })
+            except Exception as err:
+                return JsonResponse({
+                    'process': 'failed',
+                    'msg': f'{err}'
+                })
+        else:
+            # This request is for deleting a reply
+            try:
+                reply = CommentReply.objects.get(pk=reply_id)
+                reply.marked_as_deleted = True
+                reply.save()
+                return JsonResponse({
+                    'process': 'success',
+                    'msg': 'Reply deleted successfully'
+                })
+            except Exception as err:
+                return JsonResponse({
+                    'process': 'failed',
+                    'msg': f'{err}'
+                })
+
+    return JsonResponse({
+        'process': 'failed',
+        'msg': 'GET method not supported'
+    })
 
 
 def payment_failed(request):
