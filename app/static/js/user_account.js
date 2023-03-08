@@ -47,7 +47,11 @@ $(document).ready(function () {
         }).then((response) => {
             return response.json();
         }).then((data) => {
-            console.log(data);
+            if(data['process'] === 'success') {
+                location.replace('/college/plan_cancelled');
+            } else {
+                displayFormErrorMessage(false, data['msg'], 'alertmessage');
+            }
         });
 
     });

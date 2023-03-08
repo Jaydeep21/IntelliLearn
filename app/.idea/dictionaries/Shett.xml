@@ -16,6 +16,7 @@
       <w>btns</w>
       <w>cardcvv</w>
       <w>cardnumber</w>
+      <w>checkbout</w>
       <w>classdropdown</w>
       <w>classtest</w>
       <w>classtestpost</w>
@@ -29,6 +30,7 @@
       <w>classtestsolution</w>
       <w>classtestsolutions</w>
       <w>classworkpost</w>
+      <w>classworkposts</w>
       <w>clsalertclose</w>
       <w>clsalertmessage</w>
       <w>clsdpt</w>
@@ -38,8 +40,11 @@
       <w>clssubjectalertmessage</w>
       <w>clssubjectformerror</w>
       <w>collegeadmin</w>
+      <w>collegename</w>
       <w>colorbluesapphire</w>
+      <w>commentreply</w>
       <w>createpostbtn</w>
+      <w>csrftoken</w>
       <w>deptalertclose</w>
       <w>deptalertmessage</w>
       <w>deptformerror</w>
@@ -59,7 +64,9 @@
       <w>lastname</w>
       <w>linkpost</w>
       <w>linkpostbody</w>
+      <w>mathfilters</w>
       <w>mins</w>
+      <w>phoneno</w>
       <w>postcategory</w>
       <w>postcomment</w>
       <w>posttype</w>
@@ -83,6 +90,7 @@
       <w>textpostbody</w>
       <w>textposts</w>
       <w>totalnoofquestions</w>
+      <w>uploadable</w>
       <w>videopost</w>
       <w>videopostbody</w>
       <w>videopostfile</w>
