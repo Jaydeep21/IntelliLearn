@@ -243,12 +243,13 @@ $('body').on('click', '#addoptionbtn', function () {
 
 // add another question on button click
 $('#addquestionbtn').on('click', function () {
+    $('#addoptionbtn').remove();
     optionNo = 3;
     let questionHtml = '<br><br><div class="classtestqna">' +
         '<div class="form-group">' +
         `<label for="q${questionNo}">Question ${questionNo}:</label>` +
         `<input type="text" class="form-control form-control-sm classtestpostbodyinput" name="q${questionNo}"` +
-        `id="q${questionNo}" placeholder="What is the capital of India?" required="required">` +
+        `id="q${questionNo}" placeholder="What is the full form of OKR?" required="required">` +
         '</div>' +
         '<div class="form-group row opt">' +
         `<label for="q${questionNo}o1" class="col-1 opt-label">1.</label>` +

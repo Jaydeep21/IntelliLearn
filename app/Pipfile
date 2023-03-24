@@ -6,12 +6,12 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
-django = "*"
-pillow = "*"
+django = "==3.2.13"
+Pillow = ">=8.1.1"
 pymysql = "*"
 mysql-connector-python = "*"
 cryptography = "*"
 django-mathfilters = "*"
 
 [requires]
-python_version = "3.8"
+python_version = "3.10"

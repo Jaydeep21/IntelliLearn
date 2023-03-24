@@ -13,10 +13,10 @@
                         <div class="col-6">
                             <span style="font-size: 15px; font-weight: 600;">Total amount earned till date: </span>
                         </div>
-                        <div class="col-6">
-                            <i class="fas fa-rupee-sign fa-lg"></i>
+                        <div class="col-6">                            
+                            <p style="font-size: 30px; font-weight: 600;display:inline">$</p>
                             <span style="font-size: 30px; font-weight: 600;" class="count">
-                                {{ total_amount_paid_till_date }}
+                                 {{ total_amount_paid_till_date }}
                             </span>
                         </div>
                     </div>
@@ -166,7 +166,7 @@
                                 <td>{{ invoice.pk }}</td>
                                 <td>{{ invoice.college.college_name }}</td>
                                 <td>
-                                    <i class="fas fa-rupee-sign"></i>
+                                    $
                                     {{ invoice.amount_paid }}
                                 </td>
                                 <td>{{ invoice.date }}</td>
